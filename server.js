@@ -65,7 +65,10 @@ const uploadImage = async (file) => {
 };
 
 // Routes
-app.get('/', (req, res) => res.send('WELCOME TO TERRA GUARD API'));
+app.get('/', (req, res) => {
+  res.send('WELCOME TO TERRA GUARD API');
+});
+
 
 // Register
 app.post('/register', upload.single('image'), async (req, res) => {
