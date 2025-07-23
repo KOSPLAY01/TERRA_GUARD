@@ -281,5 +281,91 @@ app.post('/alerts/notify-users', async (req, res) => {
   }
 });
 
+// REPORT
+
+app.post('/reports', authenticateToken, upload.single('image'), async (req, res) => {
+  const { disaster_type, title, description, location, contact_info } = req.body;
+  const userId = req.user.id;
+
+  // Basic validation
+  if (!disaster_type || !title || !description || !location) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  try {
+    let imageUrl = null;
+    if (req.file) {
+      imageUrl = await uploadImage(req.file);
+    }
+
+    const { data: report, error } = await supabase
+      .from('reports')
+      .insert([
+        {
+          user_id: userId,
+          disaster_type,
+          title,
+          description,
+          location,
+          contact_info,
+          image_url: imageUrl,
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.status(201).json({ message: 'Report submitted successfully', report });
+  } catch (err) {
+    console.error('Submit Report Error:', err.message);
+    res.status(500).json({ error: 'Failed to submit report' });
+  }
+});
+
+//ADMIN ROUTES
+// GET ALL REPORTS
+app.get('/admin/reports', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  try {
+    const { data: reports, error } = await supabase
+      .from('reports')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    res.json(reports);
+  } catch (err) {
+    console.error('Fetch Reports Error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch reports' });
+  }
+});
+
+// GET ALL USERS
+app.get('/admin/users', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  try {
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    res.json(users);
+  } catch (err) {
+    console.error('Fetch Users Error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
