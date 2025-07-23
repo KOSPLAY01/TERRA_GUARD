@@ -8,6 +8,8 @@ import { v2 as cloudinary } from 'cloudinary';
 import fs from 'fs';
 import nodemailer from 'nodemailer';
 import { createClient } from '@supabase/supabase-js';
+import { differenceInDays, parseISO } from 'date-fns';
+import twilio from 'twilio';
 
 dotenv.config();
 
@@ -221,5 +223,63 @@ app.post('/auth/reset-password', async (req, res) => {
     res.status(400).json({ error: 'Invalid or expired token' });
   }
 });
+
+// SMS SENDING
+
+// Twilio Config
+const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+const twilioNumber = process.env.TWILIO_PHONE_NUMBER;
+
+// Notify Users Based on Location, Percentage, Date
+app.post('/alerts/notify-users', async (req, res) => {
+  const { location, percentage, date } = req.body;
+
+  if (!location || !percentage || !date)
+    return res.status(400).json({ error: 'Location, percentage, and date are required' });
+
+  const targetDate = parseISO(date);
+  const today = new Date();
+  const daysAhead = differenceInDays(targetDate, today);
+
+  if (daysAhead < 1 || daysAhead > 7)
+    return res.status(400).json({ error: 'Date must be between 1–7 days ahead' });
+
+  if (percentage < 60 || percentage > 100)
+    return res.status(400).json({ error: 'Percentage must be between 60–100' });
+
+  try {
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('phone_number')
+      .ilike('location', `%${location}%`);
+
+    if (error) throw error;
+
+    if (!users || users.length === 0)
+      return res.status(404).json({ message: 'No users found for this location' });
+
+    const alertMessage = `Flood Alert: ${percentage}% chance of flooding expected in ${location} between now and ${date}. Please stay alert and safe!`;
+
+    for (const user of users) {
+      if (!user.phone_number) continue;
+      try {
+        await twilioClient.messages.create({
+          body: alertMessage,
+          from: twilioNumber,
+          to: user.phone_number,
+        });
+      } catch (smsError) {
+        console.error(`Failed to send SMS to ${user.phone_number}: ${smsError.message}`);
+      }
+    }
+
+    res.json({ message: 'SMS alerts sent successfully', usersNotified: users.length });
+
+  } catch (err) {
+    console.error('Notify Error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
