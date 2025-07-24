@@ -8,8 +8,8 @@ import { v2 as cloudinary } from 'cloudinary';
 import fs from 'fs';
 import nodemailer from 'nodemailer';
 import { createClient } from '@supabase/supabase-js';
-import { differenceInDays, parseISO } from 'date-fns';
 import twilio from 'twilio';
+import axios from 'axios'; 
 
 dotenv.config();
 
@@ -71,7 +71,6 @@ app.get('/', (req, res) => {
   res.send('WELCOME TO TERRA GUARD API');
 });
 
-
 // Register
 app.post('/register', upload.single('image'), async (req, res) => {
   const { email, password, name, phoneNumber, location, role = 'customer' } = req.body;
@@ -105,6 +104,16 @@ app.post('/register', upload.single('image'), async (req, res) => {
       .single();
 
     if (error) throw error;
+
+    // 👉 Send welcome email
+    try {
+      await axios.post('https://terra-guard-mailer.vercel.app/api/hello', {
+        name,
+        email,
+      });
+    } catch (mailError) {
+      console.warn('Failed to send welcome message:', mailError.message);
+    }
 
     res.status(201).json({ message: 'Registered successfully', token: generateToken(user), user });
   } catch (err) {
